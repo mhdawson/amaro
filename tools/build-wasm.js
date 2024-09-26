@@ -1,29 +1,36 @@
-const { execFileSync } = require("node:child_process");
+'use strict'
+
+const WASM_BUILDER_CONTAINTER = 'ghcr.io/mhdawson/wasm-builder@sha256:666666959227f7a8a07a396da20c419305b49ef775fe4207fcc695d953d6ef10' // v0.0.7
+
+const { execSync } = require("node:child_process");
 const { resolve } = require("node:path");
 
 const ROOT = resolve(__dirname, "../");
-const DOCKERFILE = resolve(__dirname, "./Dockerfile");
 
-const name = `swc_build_wasm-${Date.now()}`;
+let platform = process.env.WASM_PLATFORM
+if (!platform && process.argv[2]) {
+  platform = execSync('docker info -f "{{.OSType}}/{{.Architecture}}"').toString().trim()
+}
 
-const buildArgs = [
-	"build",
-	"-t",
-	"swc_wasm_typescript",
-	"-f",
-	DOCKERFILE,
-	ROOT,
-];
-execFileSync("docker", buildArgs, { stdio: "inherit" });
+if (process.argv[2] === '--docker') {
+  let cmd = `docker run --rm --platform=${platform.toString().trim()} `
+  if (process.platform === 'linux') {
+    cmd += ` --user ${process.getuid()}:${process.getegid()}`
+  }
 
-const runArgs = ["run", "-d", "--name", name, "swc_wasm_typescript"];
-execFileSync("docker", runArgs, { stdio: "inherit" });
+  cmd += ` --mount type=bind,source=${ROOT}/deps/swc/bindings,target=/home/node/build/bindings \
+           --mount type=bind,source=${ROOT}/lib,target=/home/node/build/lib \
+           --mount type=bind,source=${ROOT}/tools,target=/home/node/build/tools \
+           --mount type=bind,source=${ROOT}/deps,target=/home/node/build/deps \
+           -t ${WASM_BUILDER_CONTAINTER} node tools/build-wasm.js`
+  console.log(`> ${cmd}\n\n`)
+  execSync(cmd, { stdio: 'inherit' })
+  process.exit(0)
+}
 
-// Copies the new directory inside the Docker image to the host.
-const copyArgs = ["cp", `${name}:/usr/src/amaro/swc/.`, `${ROOT}/lib/`];
-execFileSync("docker", copyArgs, { stdio: "inherit" });
-
-// Removes the Docker image.
-execFileSync("docker", ["rm", name], { stdio: "inherit" });
-
-process.exit(0);
+execSync(`cd bindings/binding_typescript_wasm && \ 
+          cargo install --locked wasm-pack && \
+          PATH=/home/node/.cargo/bin:$PATH && \
+          ./scripts/build.sh && \
+          cp -r pkg/* ../../lib`,
+         { stdio: 'inherit' })
