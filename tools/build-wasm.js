@@ -48,7 +48,7 @@ if (process.argv[2] !== "--in-container") {
 }
 
 execSync(
-	`export HOME=/home/node && \
+	`HOME=/home/node && \
          cd bindings/binding_typescript_wasm && \ 
          cargo install --locked wasm-pack && \
          PATH=/home/node/.cargo/bin:$PATH && \
