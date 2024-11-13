@@ -20,6 +20,7 @@ if (!platform && !process.argv[2]) {
 		.trim();
 }
 
+
 if (process.argv[2] !== "--in-container") {
 	// we must map in a home directory since we might not run as a user that
 	// is defined in the container. Create it here.
