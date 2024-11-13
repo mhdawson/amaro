@@ -3,6 +3,9 @@ const WASM_BUILDER_CONTAINER =
 
 const { execSync, execFileSync } = require("node:child_process");
 const { resolve } = require("node:path");
+const os = require("node:os");
+const fs = require("node:fs");
+const path = require("node:path");
 
 const ROOT = resolve(__dirname, "../");
 
@@ -18,6 +21,11 @@ if (!platform && !process.argv[2]) {
 }
 
 if (process.argv[2] !== "--in-container") {
+	// we must map in a home directory since we might not run as a user that
+	// is defined in the container. Create it here.
+	const workdir = fs.mkdtempSync(path.join(os.tmpdir(), "amaro-build"));
+
+	// buile and execute the docker command to run the build
 	const args = [];
 	args.push("run");
 	args.push("--rm");
@@ -37,6 +45,8 @@ if (process.argv[2] !== "--in-container") {
 	args.push(`type=bind,source=${ROOT}/tools,target=/home/node/build/tools`);
 	args.push("--mount");
 	args.push(`type=bind,source=${ROOT}/deps,target=/home/node/build/deps`);
+	args.push("--mount");
+	args.push(`type=bind,source=${workdir},target=/home/node/home`);
 	args.push("-t");
 	args.push(`${WASM_BUILDER_CONTAINER}`);
 	args.push("node");
@@ -44,14 +54,17 @@ if (process.argv[2] !== "--in-container") {
 	args.push("--in-container");
 	console.log(`> docker ${args}\n\n`);
 	execFileSync("docker", args, { stdio: "inherit" });
+
+	// clean up the temporary working directory and then exit
+	fs.rmSync(workdir, { recursive: true });
 	process.exit(0);
 }
 
 execSync(
-	`HOME=/home/node && \
+	`HOME=/home/node/home && \
          cd bindings/binding_typescript_wasm && \ 
          cargo install --locked wasm-pack && \
-         PATH=/home/node/.cargo/bin:$PATH && \
+         PATH=/home/node/home/.cargo/bin:$PATH && \
          ./scripts/build.sh && \
          cp -r pkg/* ../../lib`,
 	{ stdio: "inherit" },
